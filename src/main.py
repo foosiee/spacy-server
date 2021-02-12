@@ -9,12 +9,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, root_validator
 from sense2vec import Sense2VecComponent
 from starlette.responses import Response
-from starlette.status import HTTP_204_NO_CONTENT
+from starlette.status import HTTP_204_NO_CONTENT, HTTP_200_OK
+import subprocess
+from multiprocessing import Process
 
 app: FastAPI = FastAPI()
-model: str = 'en_core_web_lg'
-pipeline_error: str = f"The model ({model}) doesn't support " + '{}.'
-nlp: spacy = spacy.load(model)
+loading_model = False
+model: str = None
+nlp: spacy = None
 if os.getenv('SENSE2VEC') == '1':
     nlp.add_pipe(
         Sense2VecComponent(nlp.vocab).from_disk('src/s2v_old')
@@ -27,7 +29,7 @@ def enforce_components(components: List[str], message: str) -> None:
         if not nlp.has_pipe(component):
             raise HTTPException(
                 status_code=400,
-                detail=pipeline_error.format(message)
+                detail='Error loading pipeline!'
             )
 
 
@@ -305,3 +307,34 @@ async def check_health() -> Response:
     return Response(
         status_code=HTTP_204_NO_CONTENT
     )
+
+
+@dataclass
+class ModelStatusResponse:
+    is_loaded: bool
+    is_loading: bool
+
+@app.get('/model_status')
+async def check_model_stats() -> ModelStatusResponse:
+    is_loaded = not not model
+    return ModelStatusResponse(is_loaded, loading_model)
+
+@dataclass
+class LoadModelResponse:
+    message: str
+
+@app.post('/load_model')
+async def load_model() -> Response:
+    if model:
+        return LoadModelResponse('Model already loaded!')
+    if loading_model:
+        return LoadModelResponse('Model is still loading...')
+    task_cb = Process(target=load_model_)
+    task_cb.start()
+    return LoadModelResponse('Started background job of loading model, please check /model_status for updates.')
+
+def load_model_():
+    loading_model = True
+    subprocess.run('python -m spacy download en_core_web_lg')
+    nlp = spacy.load('en_core_web_lg')
+    loading_model = False
