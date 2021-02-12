@@ -12,7 +12,7 @@ from starlette.responses import Response
 from starlette.status import HTTP_204_NO_CONTENT
 
 app: FastAPI = FastAPI()
-model: str = 'en_core_web_sm'
+model: str = 'en_core_web_lg'
 pipeline_error: str = f"The model ({model}) doesn't support " + '{}.'
 nlp: spacy = spacy.load(model)
 if os.getenv('SENSE2VEC') == '1':
